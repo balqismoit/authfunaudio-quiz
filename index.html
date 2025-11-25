@@ -3,480 +3,348 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sensory Learning Game</title>
-    <!-- Load Tailwind CSS for simple, high-contrast styling -->
+    <title>English Fun Quiz</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel (untuk memproses JSX dalam browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
-        .btn-option {
-            transition: all 0.15s ease-out;
-            box-shadow: 0 4px 0 #57534e; /* Dark shadow for tactile feel */
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+        body { font-family: 'Nunito', sans-serif; }
+        
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
         }
-        .btn-option:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 0 #44403c;
-        }
-        .btn-option:active:not(:disabled) {
-            transform: translateY(2px);
-            box-shadow: 0 2px 0 #78716c;
-        }
-        .disabled-option {
-            opacity: 0.5;
-            cursor: not-allowed;
-            box-shadow: none;
-            transform: none;
-        }
-        .correct-answer {
-            transform: scale(1.05);
-            animation: pulse-correct 0.6s 2;
-        }
-        @keyframes pulse-correct {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-            50% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
-        }
-        .feedback-overlay {
-            z-index: 50;
-            opacity: 0;
-            transition: opacity 0.3s ease-in-out;
-        }
-        .feedback-visible {
-            opacity: 1;
-        }
-        .spinner {
-            border-top-color: #f3f3f3;
-            border-left-color: #3b82f6;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        .animate-blob { animation: blob 7s infinite; }
+        @keyframes blob {
+          0% { transform: translate(0px, 0px) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+          100% { transform: translate(0px, 0px) scale(1); }
         }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="bg-slate-50 text-slate-900 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
 
-    <div id="game-container" class="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl p-6 md:p-10 border-4 border-indigo-500 flex flex-col min-h-[90vh]">
-        
-        <!-- Header & Score -->
-        <header class="flex justify-between items-center pb-4 border-b-2 border-gray-100 mb-6">
-            <h1 class="text-3xl md:text-4xl font-black text-indigo-700">🌈 Auditory & Sensory Match</h1>
-            <div id="score-display" class="text-2xl font-bold text-gray-600">Score: 0</div>
-        </header>
+    <div id="root"></div>
 
-        <!-- Question Area -->
-        <div id="question-area" class="flex flex-col items-center justify-center flex-grow text-center">
-            <div id="prompt" class="text-3xl md:text-5xl font-extrabold text-gray-800 mb-6">
-                <!-- Prompt goes here -->
-            </div>
-            <button id="speaker-button" class="w-24 h-24 md:w-32 md:h-32 bg-yellow-400 hover:bg-yellow-500 rounded-full flex items-center justify-center p-2 shadow-xl border-4 border-yellow-600 transition-colors duration-200" onclick="Game.playAudioPrompt()">
-                <!-- Speaker Icon SVG -->
-                <svg id="speaker-icon" xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-volume-2 fill-white">
-                    <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
-                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                </svg>
-            </button>
-            <div id="tts-status" class="mt-4 text-red-500 font-semibold hidden"></div>
-        </div>
-        
-        <!-- Options Area -->
-        <div id="options-area" class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mt-10">
-            <!-- Option buttons will be injected here -->
-        </div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
 
-        <!-- Start/Next Button -->
-        <button id="start-button" onclick="Game.startGame()" class="mt-8 py-4 px-8 bg-green-600 hover:bg-green-700 text-white text-2xl font-bold rounded-xl btn-option self-center w-full max-w-sm">
-            Start Game
-        </button>
-    </div>
+        // --- ICONS (SVG Inline ganti Lucide-React untuk standalone HTML) ---
+        const StarIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
+        const PlayIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+        const RefreshIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>;
+        const TrophyIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
+        const CheckIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+        const XIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>;
+        const CoffeeIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>;
+        const CopyIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>;
+        const CheckSimpleIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>;
 
-    <!-- Visual Feedback Modal -->
-    <div id="feedback-overlay" class="feedback-overlay fixed inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
-        <div id="feedback-content" class="p-10 md:p-16 rounded-2xl shadow-2xl text-white text-3xl md:text-6xl font-extrabold transform scale-100">
-            <!-- Feedback text (e.g., "Correct!") -->
-        </div>
-    </div>
-
-    <script>
-        // --- API Configuration ---
-        const API_KEY = ""; // Canvas will provide this key at runtime
-        const TTS_MODEL = "gemini-2.5-flash-preview-tts";
-        const TTS_VOICE = "Kore"; // Clear and firm voice
-
-        // --- Utility Functions for Audio Playback (PCM to WAV) ---
-
-        /** Converts base64 string to ArrayBuffer. */
-        function base64ToArrayBuffer(base64) {
-            const binaryString = atob(base64);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            return bytes.buffer;
-        }
-
-        /** Converts signed PCM 16-bit audio data to a playable WAV Blob. */
-        function pcmToWav(pcm16, sampleRate = 16000) {
-            const numChannels = 1;
-            const bitsPerSample = 16;
-            const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-            const blockAlign = numChannels * (bitsPerSample / 8);
-
-            const buffer = new ArrayBuffer(44 + pcm16.byteLength);
-            const view = new DataView(buffer);
-            let offset = 0;
-
-            const writeString = (s) => {
-                for (let i = 0; i < s.length; i++) {
-                    view.setUint8(offset + i, s.charCodeAt(i));
-                }
-                offset += s.length;
-            };
-
-            // RIFF header
-            writeString('RIFF');
-            view.setUint32(offset, 36 + pcm16.byteLength, true); offset += 4;
-            writeString('WAVE');
-
-            // fmt chunk
-            writeString('fmt ');
-            view.setUint32(offset, 16, true); offset += 4;
-            view.setUint16(offset, 1, true); offset += 2;  // PCM format
-            view.setUint16(offset, numChannels, true); offset += 2;
-            view.setUint32(offset, sampleRate, true); offset += 4;
-            view.setUint32(offset, byteRate, true); offset += 4;
-            view.setUint16(offset, blockAlign, true); offset += 2;
-            view.setUint16(offset, bitsPerSample, true); offset += 2;
-
-            // data chunk
-            writeString('data');
-            view.setUint32(offset, pcm16.byteLength, true); offset += 4;
-
-            // Write PCM data
-            const pcmBytes = new Uint8Array(pcm16.buffer);
-            for (let i = 0; i < pcmBytes.length; i++, offset++) {
-                view.setUint8(offset, pcmBytes[i]);
-            }
-
-            return new Blob([view], { type: 'audio/wav' });
-        }
-
-        /** Calls the Gemini TTS API and returns a promise that resolves with the audio URL. */
-        async function getAudioUrl(textToSpeak) {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${API_KEY}`;
-            const payload = {
-                contents: [{ parts: [{ text: textToSpeak }] }],
-                generationConfig: {
-                    responseModalities: ["AUDIO"],
-                    speechConfig: {
-                        voiceConfig: { prebuiltVoiceConfig: { voiceName: TTS_VOICE } }
-                    }
-                },
-                model: TTS_MODEL
-            };
-
-            let maxRetries = 3;
-            let delay = 1000;
-
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        if (response.status === 429 && i < maxRetries - 1) {
-                            console.warn(`TTS API rate limit hit. Retrying in ${delay / 1000}s...`);
-                            await new Promise(resolve => setTimeout(resolve, delay));
-                            delay *= 2; // Exponential backoff
-                            continue;
-                        }
-                        throw new Error(`TTS API failed with status: ${response.status}`);
-                    }
-
-                    const result = await response.json();
-                    const part = result?.candidates?.[0]?.content?.parts?.[0];
-                    const audioData = part?.inlineData?.data;
-                    const mimeType = part?.inlineData?.mimeType;
-
-                    if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
-                        const sampleRate = 16000; // API default for L16 is 16kHz
-                        const pcmData = base64ToArrayBuffer(audioData);
-                        const pcm16 = new Int16Array(pcmData);
-                        const wavBlob = pcmToWav(pcm16, sampleRate);
-                        return URL.createObjectURL(wavBlob);
-                    } else {
-                        throw new Error("Invalid TTS response structure or mimeType.");
-                    }
-                } catch (error) {
-                    console.error("TTS generation error:", error);
-                    if (i === maxRetries - 1) {
-                        return null; // Return null after all retries fail
-                    }
-                }
-            }
-        }
-        
-        // --- Game Data and Logic ---
-
-        // Helper to generate simple SVG shapes
-        const createSvg = (shape, color, size = '100%') => {
-            let path = '';
-            const fill = color;
-            switch (shape.toLowerCase()) {
-                case 'circle': path = `<circle cx="50" cy="50" r="45" />`; break;
-                case 'square': path = `<rect x="5" y="5" width="90" height="90" rx="10" />`; break;
-                case 'triangle': path = `<polygon points="50,5 95,95 5,95" />`; break;
-                case 'star': path = `<polygon points="50,5 61,35 95,40 70,65 78,95 50,80 22,95 30,65 5,40 39,35" />`; break;
-            }
-            return `<svg viewBox="0 0 100 100" class="w-[${size}] h-[${size}] fill-current text-${fill}-500 stroke-2">${path}</svg>`;
-        };
-
-        const QUESTIONS = [
-            // Mode 1: Color Match (Target: Color Name Spoken, Options: Colored Buttons)
-            { type: 'color', target: 'Blue', prompt: 'Which color is BLUE?', targetAudio: 'Find the color blue.', options: [
-                { id: 1, type: 'color', name: 'Blue', color: 'blue', html: `<div class="w-full h-full bg-blue-500 rounded-lg"></div>` },
-                { id: 2, type: 'color', name: 'Red', color: 'red', html: `<div class="w-full h-full bg-red-500 rounded-lg"></div>` },
-                { id: 3, type: 'color', name: 'Yellow', color: 'yellow', html: `<div class="w-full h-full bg-yellow-400 rounded-lg"></div>` },
-            ]},
-            { type: 'color', target: 'Green', prompt: 'Which color is GREEN?', targetAudio: 'Find the color green.', options: [
-                { id: 4, type: 'color', name: 'Red', color: 'red', html: `<div class="w-full h-full bg-red-500 rounded-lg"></div>` },
-                { id: 5, type: 'color', name: 'Green', color: 'green', html: `<div class="w-full h-full bg-green-500 rounded-lg"></div>` },
-                { id: 6, type: 'color', name: 'Purple', color: 'purple', html: `<div class="w-full h-full bg-purple-500 rounded-lg"></div>` },
-            ]},
-
-            // Mode 2: Shape Match (Target: Shape Name Spoken, Options: Shapes)
-            { type: 'shape', target: 'Square', prompt: 'Which shape is a SQUARE?', targetAudio: 'Find the square shape.', options: [
-                { id: 7, type: 'shape', name: 'Triangle', color: 'teal', html: createSvg('triangle', 'teal') },
-                { id: 8, type: 'shape', name: 'Square', color: 'amber', html: createSvg('square', 'amber') },
-                { id: 9, type: 'shape', name: 'Circle', color: 'indigo', html: createSvg('circle', 'indigo') },
-            ]},
-            { type: 'shape', target: 'Circle', prompt: 'Which shape is a CIRCLE?', targetAudio: 'Find the circle shape.', options: [
-                { id: 10, type: 'shape', name: 'Square', color: 'purple', html: createSvg('square', 'purple') },
-                { id: 11, type: 'shape', name: 'Circle', color: 'pink', html: createSvg('circle', 'pink') },
-                { id: 12, type: 'shape', name: 'Star', color: 'cyan', html: createSvg('star', 'cyan') },
-            ]},
-            
-            // Mode 3: Auditory Match (Target: Emotion Name Spoken, Options: Emotion Faces)
-            { type: 'emotion', target: 'Happy', prompt: 'Which face is HAPPY?', targetAudio: 'Find the happy face.', options: [
-                { id: 13, type: 'emotion', name: 'Sad', emoji: '😢', html: `<span class="text-7xl">😢</span>` },
-                { id: 14, type: 'emotion', name: 'Happy', emoji: '😊', html: `<span class="text-7xl">😊</span>` },
-                { id: 15, type: 'emotion', name: 'Angry', emoji: '😡', html: `<span class="text-7xl">😡</span>` },
-            ]},
-            { type: 'emotion', target: 'Sad', prompt: 'Which face is SAD?', targetAudio: 'Find the sad face.', options: [
-                { id: 16, type: 'emotion', name: 'Sad', emoji: '😞', html: `<span class="text-7xl">😞</span>` },
-                { id: 17, type: 'emotion', name: 'Surprised', emoji: '😮', html: `<span class="text-7xl">😮</span>` },
-                { id: 18, type: 'emotion', name: 'Calm', emoji: '😌', html: `<span class="text-7xl">😌</span>` },
-            ]},
+        const QUESTIONS_DATA = [
+            { id: 1, question: "What animal is this?", image: "🐱", options: ["Dog", "Cat", "Mouse"], answer: "Cat" },
+            { id: 2, question: "What fruit is this?", image: "🍎", options: ["Banana", "Apple", "Orange"], answer: "Apple" },
+            { id: 3, question: "What is this?", image: "🚗", options: ["Car", "Bus", "Bike"], answer: "Car" },
+            { id: 4, question: "What color is the sun?", image: "☀️", options: ["Blue", "Yellow", "Green"], answer: "Yellow" },
+            { id: 5, question: "What is this used for reading?", image: "📖", options: ["Table", "Book", "Pen"], answer: "Book" },
+            { id: 6, question: "What do we play with?", image: "⚽", options: ["Ball", "Bat", "Net"], answer: "Ball" },
+            { id: 7, question: "It grows in the garden.", image: "🌳", options: ["Rock", "Tree", "Water"], answer: "Tree" },
+            { id: 8, question: "Where do we live?", image: "🏠", options: ["House", "School", "Park"], answer: "House" },
+            { id: 9, question: "It swims in the water.", image: "🐟", options: ["Bird", "Fish", "Cat"], answer: "Fish" },
+            { id: 10, question: "It flies in the sky.", image: "🐦", options: ["Fish", "Bird", "Snake"], answer: "Bird" },
+            { id: 11, question: "We use this to write.", image: "✏️", options: ["Pencil", "Ruler", "Eraser"], answer: "Pencil" },
+            { id: 12, question: "We sit on this.", image: "🪑", options: ["Table", "Chair", "Bed"], answer: "Chair" },
+            { id: 13, question: "It tells the time.", image: "⏰", options: ["Watch", "Clock", "Phone"], answer: "Clock" },
+            { id: 14, question: "It smells nice.", image: "🌸", options: ["Flower", "Leaf", "Grass"], answer: "Flower" },
+            { id: 15, question: "We wear this on our head.", image: "🧢", options: ["Shirt", "Shoe", "Hat"], answer: "Hat" },
+            { id: 16, question: "We wear these on our feet.", image: "👟", options: ["Gloves", "Socks", "Shoes"], answer: "Shoes" },
+            { id: 17, question: "We eat soup with this.", image: "🥄", options: ["Fork", "Knife", "Spoon"], answer: "Spoon" },
+            { id: 18, question: "What is this?", image: "🍌", options: ["Apple", "Banana", "Grape"], answer: "Banana" },
+            { id: 19, question: "This animal has a long trunk.", image: "🐘", options: ["Lion", "Elephant", "Tiger"], answer: "Elephant" },
+            { id: 20, question: "We see this at night.", image: "🌙", options: ["Sun", "Moon", "Cloud"], answer: "Moon" },
+            { id: 21, question: "It goes 'Moo'.", image: "🐄", options: ["Cow", "Sheep", "Horse"], answer: "Cow" },
+            { id: 22, question: "It is a big transport.", image: "🚌", options: ["Car", "Bus", "Taxi"], answer: "Bus" },
+            { id: 23, question: "It flies high with passengers.", image: "✈️", options: ["Train", "Boat", "Plane"], answer: "Plane" },
+            { id: 24, question: "Part of the body (Vision).", image: "👁️", options: ["Ear", "Nose", "Eye"], answer: "Eye" },
+            { id: 25, question: "Part of the body (Eating).", image: "👄", options: ["Mouth", "Hand", "Leg"], answer: "Mouth" },
+            { id: 26, question: "Green vegetable.", image: "🥦", options: ["Carrot", "Broccoli", "Potato"], answer: "Broccoli" },
+            { id: 27, question: "King of the jungle.", image: "🦁", options: ["Tiger", "Lion", "Bear"], answer: "Lion" },
+            { id: 28, question: "It rains from this.", image: "☁️", options: ["Sun", "Cloud", "Star"], answer: "Cloud" },
+            { id: 29, question: "We sleep on this.", image: "🛏️", options: ["Chair", "Desk", "Bed"], answer: "Bed" },
+            { id: 30, question: "Sweet treat.", image: "🍦", options: ["Ice Cream", "Bread", "Rice"], answer: "Ice Cream" },
         ];
 
-        // Global Game State
-        const Game = {
-            questions: [],
-            currentQuestionIndex: 0,
-            score: 0,
-            isLocked: false,
-            audioCache: {},
-            currentAudio: null,
-            ttsError: false,
+        function App() {
+            const [gameState, setGameState] = useState('start');
+            const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+            const [score, setScore] = useState(0);
+            const [selectedOption, setSelectedOption] = useState(null);
+            const [isCorrect, setIsCorrect] = useState(null);
+            const [feedbackMessage, setFeedbackMessage] = useState("");
 
-            init() {
-                this.questions = [...QUESTIONS].sort(() => Math.random() - 0.5); // Shuffle
-                this.updateScore();
-                this.renderMenu();
-                // Ensure audio is ready by pre-caching the first prompt's audio
-                this.preCacheAudio(this.questions[0].targetAudio);
-            },
-
-            renderMenu() {
-                document.getElementById('prompt').innerHTML = `Welcome! Press Start to play.`;
-                document.getElementById('options-area').innerHTML = `
-                    <div class="md:col-span-3 text-xl text-gray-500 p-8">
-                        <p>This game helps match spoken words to visual concepts (colors, shapes, emotions).</p>
-                        <p class="mt-2 text-indigo-500 font-bold">Tap the speaker icon to hear the prompt again!</p>
-                    </div>
-                `;
-                document.getElementById('speaker-button').classList.add('hidden');
-                document.getElementById('start-button').innerText = 'Start Game';
-                document.getElementById('start-button').onclick = () => this.startGame();
-            },
-
-            startGame() {
-                this.currentQuestionIndex = 0;
-                this.score = 0;
-                this.updateScore();
-                document.getElementById('start-button').innerText = 'Next Question';
-                document.getElementById('start-button').onclick = () => this.loadNextQuestion();
-                this.loadQuestion();
-            },
-
-            updateScore() {
-                document.getElementById('score-display').innerText = `Score: ${this.score}/${this.questions.length}`;
-            },
-            
-            // --- Audio & TTS Handlers ---
-
-            async preCacheAudio(text) {
-                if (this.audioCache[text] || this.ttsError) return;
-                
-                document.getElementById('tts-status').innerText = 'Loading audio...';
-                document.getElementById('tts-status').classList.remove('hidden');
-
-                const audioUrl = await getAudioUrl(text);
-                if (audioUrl) {
-                    this.audioCache[text] = audioUrl;
-                    document.getElementById('tts-status').classList.add('hidden');
-                } else {
-                    this.ttsError = true;
-                    document.getElementById('tts-status').innerText = 'Audio unavailable (TTS error).';
-                }
-            },
-
-            async playAudioPrompt() {
-                if (this.isLocked || this.currentAudio && !this.currentAudio.paused) return;
-                
-                const q = this.questions[this.currentQuestionIndex];
-                if (!q || this.ttsError) return;
-
-                let audioUrl = this.audioCache[q.targetAudio];
-                
-                if (!audioUrl) {
-                    document.getElementById('tts-status').innerText = 'Loading audio...';
-                    document.getElementById('tts-status').classList.remove('hidden');
-                    audioUrl = await getAudioUrl(q.targetAudio);
-                    if (audioUrl) {
-                        this.audioCache[q.targetAudio] = audioUrl;
-                        document.getElementById('tts-status').classList.add('hidden');
-                    } else {
-                        this.ttsError = true;
-                        document.getElementById('tts-status').innerText = 'Audio unavailable (TTS error).';
-                        return;
-                    }
-                }
-                
-                this.currentAudio = new Audio(audioUrl);
-                this.currentAudio.play().catch(e => console.error("Error playing audio:", e));
-            },
-
-            // --- Game Flow ---
-
-            loadQuestion() {
-                if (this.currentQuestionIndex >= this.questions.length) {
-                    return this.showEndScreen();
-                }
-
-                this.isLocked = false;
-                const q = this.questions[this.currentQuestionIndex];
-                
-                document.getElementById('speaker-button').classList.remove('hidden');
-                document.getElementById('prompt').innerText = q.prompt;
-                document.getElementById('start-button').classList.add('hidden');
-                
-                // Shuffle options for the current question
-                const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
-
-                let optionsHTML = '';
-                shuffledOptions.forEach(option => {
-                    const isCorrect = option.name === q.target;
-                    const buttonClass = `btn-option bg-gray-100 hover:bg-gray-200 p-4 rounded-xl text-center flex flex-col items-center justify-center h-32 md:h-48 border-4 border-gray-400`;
+            const playSound = (type) => {
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContext) return;
                     
-                    optionsHTML += `
-                        <button id="opt-${option.id}" class="${buttonClass}" 
-                                onclick="Game.checkAnswer('${option.name}', ${isCorrect}, this)">
-                            ${option.html}
-                        </button>
-                    `;
-                });
+                    const ctx = new AudioContext();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
 
-                document.getElementById('options-area').innerHTML = optionsHTML;
-                
-                // Pre-cache audio for the next question while the user plays the current one
-                if (this.currentQuestionIndex + 1 < this.questions.length) {
-                    this.preCacheAudio(this.questions[this.currentQuestionIndex + 1].targetAudio);
-                }
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
 
-                // Play the prompt automatically (after a short delay for UI load)
-                setTimeout(() => this.playAudioPrompt(), 500);
-            },
-
-            checkAnswer(selectedName, isCorrect, buttonElement) {
-                if (this.isLocked) return;
-                this.isLocked = true;
-
-                if (isCorrect) {
-                    this.score++;
-                    this.updateScore();
-                    buttonElement.classList.add('correct-answer', 'border-green-600', 'bg-green-100');
-                    this.showFeedback('Correct!', 'bg-green-600');
-                } else {
-                    buttonElement.classList.add('border-red-600', 'bg-red-100');
-                    this.showFeedback('Try Again!', 'bg-red-600');
-                    // Highlight the correct answer briefly
-                    const correctOption = this.questions[this.currentQuestionIndex].options.find(opt => opt.name === this.questions[this.currentQuestionIndex].target);
-                    const correctButton = document.getElementById(`opt-${correctOption.id}`);
-                    if (correctButton) {
-                        correctButton.classList.add('correct-answer', 'border-green-600', 'bg-green-100');
+                    if (type === 'correct') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(600, ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.1);
+                        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                        osc.start(ctx.currentTime);
+                        osc.stop(ctx.currentTime + 0.5);
+                    } else if (type === 'wrong') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(150, ctx.currentTime);
+                        osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.3);
+                        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                        osc.start(ctx.currentTime);
+                        osc.stop(ctx.currentTime + 0.3);
+                    } else if (type === 'click') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(300, ctx.currentTime);
+                        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                        osc.start(ctx.currentTime);
+                        osc.stop(ctx.currentTime + 0.1);
                     }
-                }
+                } catch (e) { console.error("Audio error", e); }
+            };
 
-                // Disable all options
-                document.querySelectorAll('#options-area button').forEach(btn => {
-                    btn.disabled = true;
-                    btn.classList.add('disabled-option');
-                });
-                
-                document.getElementById('start-button').classList.remove('hidden');
+            const startGame = () => {
+                playSound('click');
+                setGameState('playing');
+                setScore(0);
+                setCurrentQuestionIndex(0);
+                setSelectedOption(null);
+                setIsCorrect(null);
+                setFeedbackMessage("");
+            };
+
+            const handleAnswerClick = (option) => {
+                if (selectedOption) return;
+
+                setSelectedOption(option);
+                const currentQ = QUESTIONS_DATA[currentQuestionIndex];
+                const correct = option === currentQ.answer;
+
+                setIsCorrect(correct);
+
+                if (correct) {
+                    playSound('correct');
+                    setScore(score + 1);
+                    setFeedbackMessage("Excellent! 🎉");
+                } else {
+                    playSound('wrong');
+                    setFeedbackMessage(`Oops! The answer is ${currentQ.answer}`);
+                }
 
                 setTimeout(() => {
-                    this.hideFeedback();
-                }, 1500); 
-            },
+                    if (currentQuestionIndex < QUESTIONS_DATA.length - 1) {
+                        setCurrentQuestionIndex(currentQuestionIndex + 1);
+                        setSelectedOption(null);
+                        setIsCorrect(null);
+                        setFeedbackMessage("");
+                    } else {
+                        setGameState('finished');
+                        playSound('correct');
+                    }
+                }, 1500);
+            };
 
-            loadNextQuestion() {
-                this.currentQuestionIndex++;
-                // Clean up previous classes
-                document.querySelectorAll('#options-area button').forEach(btn => {
-                    btn.classList.remove('correct-answer', 'border-green-600', 'bg-green-100', 'border-red-600', 'bg-red-100', 'disabled-option');
-                });
-                this.loadQuestion();
-            },
+            const getStars = () => {
+                const percentage = (score / QUESTIONS_DATA.length) * 100;
+                if (percentage === 100) return 3;
+                if (percentage >= 70) return 2;
+                if (percentage >= 40) return 1;
+                return 0;
+            };
 
-            showEndScreen() {
-                document.getElementById('prompt').innerHTML = `Game Finished!`;
-                document.getElementById('options-area').innerHTML = `
-                    <div class="md:col-span-3 text-center text-3xl font-bold text-indigo-700 p-8">
-                        <p>Your Final Score: ${this.score} out of ${this.questions.length}</p>
-                        <p class="mt-4 text-xl text-gray-600">You did great! Let's play again.</p>
+            // --- COMPONENTS ---
+            
+            const DeveloperFooter = () => {
+                const [isExpanded, setIsExpanded] = useState(false);
+                const [copied, setCopied] = useState(false);
+
+                const handleCopy = () => {
+                    const text = "121497041251";
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                    } catch (err) { console.error('Failed to copy', err); }
+                    document.body.removeChild(textArea);
+                };
+
+                return (
+                    <div className="absolute bottom-4 left-0 w-full flex flex-col items-center justify-center gap-2 z-20">
+                        <p className="text-sm text-gray-400 drop-shadow-sm">
+                            App created by <span className="font-bold text-blue-500">NBMM (Nurul Balqis Mohd Moit)</span>
+                        </p>
+                        
+                        {!isExpanded ? (
+                            <button 
+                                onClick={() => setIsExpanded(true)}
+                                className="flex items-center gap-2 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 px-4 py-1.5 rounded-full transition-all duration-300 shadow-sm border border-amber-200"
+                            >
+                                <CoffeeIcon className="w-3.5 h-3.5" />
+                                Tips for Developer
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-3 bg-white/90 backdrop-blur-sm p-3 rounded-xl shadow-xl border border-amber-100 animate-in slide-in-from-bottom-2 fade-in zoom-in-95 duration-200">
+                                <div className="flex flex-col items-start">
+                                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">DuitNow</span>
+                                    <code className="text-sm font-mono font-bold text-gray-700">121497041251</code>
+                                </div>
+                                
+                                <button 
+                                    onClick={handleCopy}
+                                    className={`p-2 rounded-lg transition-all duration-200 ${
+                                        copied 
+                                        ? 'bg-green-100 text-green-600' 
+                                        : 'bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600'
+                                    }`}
+                                    title="Copy Number"
+                                >
+                                    {copied ? <CheckSimpleIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                                </button>
+                                
+                                <button 
+                                    onClick={() => setIsExpanded(false)}
+                                    className="ml-1 p-1 text-gray-400 hover:text-red-400 rounded-full hover:bg-red-50 transition-colors"
+                                >
+                                    <XIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
                     </div>
-                `;
-                document.getElementById('speaker-button').classList.add('hidden');
-                document.getElementById('start-button').innerText = 'Play Again';
-                document.getElementById('start-button').onclick = () => this.startGame();
-                document.getElementById('start-button').classList.remove('hidden');
-            },
+                );
+            };
 
-            showFeedback(text, bgColor) {
-                const overlay = document.getElementById('feedback-overlay');
-                const content = document.getElementById('feedback-content');
-                
-                content.innerText = text;
-                content.className = `p-10 md:p-16 rounded-2xl shadow-2xl text-white text-3xl md:text-6xl font-extrabold transform scale-100 animate-pulse ${bgColor}`;
-                overlay.classList.add('feedback-visible');
-            },
+            const StartScreen = () => (
+                <div className="flex flex-col items-center justify-center h-full p-6 text-center animate-in fade-in zoom-in duration-500 relative">
+                    <div className="mb-6 p-6 bg-yellow-100 rounded-full border-4 border-yellow-400 shadow-xl">
+                        <span className="text-8xl">🦁</span>
+                    </div>
+                    <h1 className="text-4xl md:text-6xl font-black text-blue-600 mb-2 drop-shadow-sm tracking-wide">English Fun Quiz</h1>
+                    <p className="text-gray-600 text-lg mb-8 font-medium">FOR TODDLERS</p>
+                    <button onClick={startGame} className="group relative inline-flex items-center justify-center px-8 py-4 text-2xl font-bold text-white transition-all duration-200 bg-green-500 font-lg rounded-2xl hover:bg-green-600 hover:scale-105 shadow-[0_6px_0_rgb(21,128,61)] hover:shadow-[0_4px_0_rgb(21,128,61)] active:shadow-none active:translate-y-2 mb-16">
+                        <PlayIcon className="mr-3 w-8 h-8 fill-current" />
+                        Start Game!
+                    </button>
+                    <DeveloperFooter />
+                </div>
+            );
 
-            hideFeedback() {
-                document.getElementById('feedback-overlay').classList.remove('feedback-visible');
-            }
-        };
+            const GameScreen = () => {
+                const question = QUESTIONS_DATA[currentQuestionIndex];
+                const progress = ((currentQuestionIndex + 1) / QUESTIONS_DATA.length) * 100;
+                return (
+                    <div className="flex flex-col h-full max-w-2xl mx-auto w-full">
+                        <div className="flex justify-between items-center p-4 bg-white/50 backdrop-blur-sm rounded-b-2xl shadow-sm mb-4">
+                            <div className="flex items-center gap-2">
+                                <span className="bg-blue-100 p-2 rounded-lg text-blue-600 font-bold">Q: {currentQuestionIndex + 1}/{QUESTIONS_DATA.length}</span>
+                            </div>
+                            <div className="flex items-center gap-2 bg-yellow-100 px-4 py-2 rounded-full border-2 border-yellow-400">
+                                <StarIcon className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                                <span className="font-black text-yellow-700 text-xl">{score}</span>
+                            </div>
+                        </div>
+                        <div className="w-full bg-gray-200 h-3 rounded-full mb-6 mx-4 w-[calc(100%-2rem)]">
+                            <div className="bg-blue-500 h-3 rounded-full transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div>
+                        </div>
+                        <div className="flex-1 flex flex-col items-center justify-center p-4">
+                            <div className="bg-white p-8 rounded-3xl shadow-xl w-full text-center border-b-8 border-blue-200 relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400"></div>
+                                <div className="text-9xl mb-6 transform hover:scale-110 transition-transform duration-300 cursor-default select-none">{question.image}</div>
+                                <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-8">{question.question}</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {question.options.map((option, idx) => {
+                                        let btnClass = "bg-white border-4 border-blue-100 text-blue-600 hover:border-blue-400 hover:bg-blue-50";
+                                        if (selectedOption) {
+                                            if (option === question.answer) btnClass = "bg-green-100 border-green-500 text-green-700 ring-4 ring-green-200";
+                                            else if (option === selectedOption) btnClass = "bg-red-100 border-red-500 text-red-700";
+                                            else btnClass = "bg-gray-50 border-gray-200 text-gray-400 opacity-50";
+                                        }
+                                        return (
+                                            <button key={idx} onClick={() => handleAnswerClick(option)} disabled={selectedOption !== null} className={`py-4 px-2 rounded-xl text-xl font-bold transition-all duration-200 shadow-sm active:scale-95 ${btnClass}`}>
+                                                {option}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className={`mt-6 h-16 flex items-center justify-center transition-opacity duration-300 ${selectedOption ? 'opacity-100' : 'opacity-0'}`}>
+                                {isCorrect === true && <div className="flex items-center gap-3 bg-green-500 text-white px-6 py-3 rounded-full shadow-lg animate-bounce"><CheckIcon className="w-6 h-6" /><span className="text-xl font-bold">{feedbackMessage}</span></div>}
+                                {isCorrect === false && <div className="flex items-center gap-3 bg-red-500 text-white px-6 py-3 rounded-full shadow-lg animate-shake"><XIcon className="w-6 h-6" /><span className="text-xl font-bold">{feedbackMessage}</span></div>}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
 
-        // Initialize the game when the page loads
-        window.onload = () => {
-            Game.init();
-        };
+            const ResultScreen = () => {
+                const stars = getStars();
+                return (
+                    <div className="flex flex-col items-center justify-center h-full p-6 text-center animate-in slide-in-from-bottom duration-500 relative">
+                        <div className="relative mb-8">
+                            <TrophyIcon className="w-32 h-32 text-yellow-400 drop-shadow-lg mx-auto" />
+                            <div className="flex justify-center mt-4 gap-2">
+                                {[...Array(3)].map((_, i) => (
+                                    <StarIcon key={i} className={`w-12 h-12 ${i < stars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} transition-all delay-${i*100}`} />
+                                ))}
+                            </div>
+                        </div>
+                        <h2 className="text-4xl font-black text-gray-800 mb-2">{stars === 3 ? "Amazing Job! 🌟" : stars === 2 ? "Well Done! 👍" : "Good Try! 💪"}</h2>
+                        <p className="text-xl text-gray-600 mb-8">You scored <span className="font-bold text-blue-600 text-2xl">{score}</span> out of {QUESTIONS_DATA.length}</p>
+                        <div className="grid gap-4 w-full max-w-xs mb-16">
+                            <button onClick={startGame} className="flex items-center justify-center px-8 py-4 bg-blue-500 text-white rounded-2xl font-bold text-xl hover:bg-blue-600 hover:scale-105 transition-all shadow-lg">
+                                <RefreshIcon className="mr-2 w-6 h-6" /> Play Again
+                            </button>
+                        </div>
+                        <DeveloperFooter />
+                    </div>
+                );
+            };
 
+            return (
+                <div className="w-full max-w-4xl h-[100dvh] md:h-[85vh] bg-white md:rounded-[2rem] shadow-2xl overflow-hidden relative ring-8 ring-blue-500/10 flex flex-col mx-auto my-0 md:my-8">
+                    <div className="absolute top-[-50px] left-[-50px] w-32 h-32 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+                    <div className="absolute top-[-50px] right-[-50px] w-32 h-32 bg-purple-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+                    <div className="absolute bottom-[-50px] left-[20%] w-32 h-32 bg-pink-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+                    <div className="relative h-full z-10 w-full">
+                        {gameState === 'start' && <StartScreen />}
+                        {gameState === 'playing' && <GameScreen />}
+                        {gameState === 'finished' && <ResultScreen />}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
