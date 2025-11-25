@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensory Learning Game</title>
+    <!-- Load Tailwind CSS for simple, high-contrast styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .btn-option {
+            transition: all 0.15s ease-out;
+            box-shadow: 0 4px 0 #57534e; /* Dark shadow for tactile feel */
+        }
+        .btn-option:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0 #44403c;
+        }
+        .btn-option:active:not(:disabled) {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #78716c;
+        }
+        .disabled-option {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+        .correct-answer {
+            transform: scale(1.05);
+            animation: pulse-correct 0.6s 2;
+        }
+        @keyframes pulse-correct {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+        }
+        .feedback-overlay {
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .feedback-visible {
+            opacity: 1;
+        }
+        .spinner {
+            border-top-color: #f3f3f3;
+            border-left-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="game-container" class="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl p-6 md:p-10 border-4 border-indigo-500 flex flex-col min-h-[90vh]">
+        
+        <!-- Header & Score -->
+        <header class="flex justify-between items-center pb-4 border-b-2 border-gray-100 mb-6">
+            <h1 class="text-3xl md:text-4xl font-black text-indigo-700">🌈 Auditory & Sensory Match</h1>
+            <div id="score-display" class="text-2xl font-bold text-gray-600">Score: 0</div>
+        </header>
+
+        <!-- Question Area -->
+        <div id="question-area" class="flex flex-col items-center justify-center flex-grow text-center">
+            <div id="prompt" class="text-3xl md:text-5xl font-extrabold text-gray-800 mb-6">
+                <!-- Prompt goes here -->
+            </div>
+            <button id="speaker-button" class="w-24 h-24 md:w-32 md:h-32 bg-yellow-400 hover:bg-yellow-500 rounded-full flex items-center justify-center p-2 shadow-xl border-4 border-yellow-600 transition-colors duration-200" onclick="Game.playAudioPrompt()">
+                <!-- Speaker Icon SVG -->
+                <svg id="speaker-icon" xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-volume-2 fill-white">
+                    <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                </svg>
+            </button>
+            <div id="tts-status" class="mt-4 text-red-500 font-semibold hidden"></div>
+        </div>
+        
+        <!-- Options Area -->
+        <div id="options-area" class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mt-10">
+            <!-- Option buttons will be injected here -->
+        </div>
+
+        <!-- Start/Next Button -->
+        <button id="start-button" onclick="Game.startGame()" class="mt-8 py-4 px-8 bg-green-600 hover:bg-green-700 text-white text-2xl font-bold rounded-xl btn-option self-center w-full max-w-sm">
+            Start Game
+        </button>
+    </div>
+
+    <!-- Visual Feedback Modal -->
+    <div id="feedback-overlay" class="feedback-overlay fixed inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+        <div id="feedback-content" class="p-10 md:p-16 rounded-2xl shadow-2xl text-white text-3xl md:text-6xl font-extrabold transform scale-100">
+            <!-- Feedback text (e.g., "Correct!") -->
+        </div>
+    </div>
+
+    <script>
+        // --- API Configuration ---
+        const API_KEY = ""; // Canvas will provide this key at runtime
+        const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+        const TTS_VOICE = "Kore"; // Clear and firm voice
+
+        // --- Utility Functions for Audio Playback (PCM to WAV) ---
+
+        /** Converts base64 string to ArrayBuffer. */
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        /** Converts signed PCM 16-bit audio data to a playable WAV Blob. */
+        function pcmToWav(pcm16, sampleRate = 16000) {
+            const numChannels = 1;
+            const bitsPerSample = 16;
+            const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+            const blockAlign = numChannels * (bitsPerSample / 8);
+
+            const buffer = new ArrayBuffer(44 + pcm16.byteLength);
+            const view = new DataView(buffer);
+            let offset = 0;
+
+            const writeString = (s) => {
+                for (let i = 0; i < s.length; i++) {
+                    view.setUint8(offset + i, s.charCodeAt(i));
+                }
+                offset += s.length;
+            };
+
+            // RIFF header
+            writeString('RIFF');
+            view.setUint32(offset, 36 + pcm16.byteLength, true); offset += 4;
+            writeString('WAVE');
+
+            // fmt chunk
+            writeString('fmt ');
+            view.setUint32(offset, 16, true); offset += 4;
+            view.setUint16(offset, 1, true); offset += 2;  // PCM format
+            view.setUint16(offset, numChannels, true); offset += 2;
+            view.setUint32(offset, sampleRate, true); offset += 4;
+            view.setUint32(offset, byteRate, true); offset += 4;
+            view.setUint16(offset, blockAlign, true); offset += 2;
+            view.setUint16(offset, bitsPerSample, true); offset += 2;
+
+            // data chunk
+            writeString('data');
+            view.setUint32(offset, pcm16.byteLength, true); offset += 4;
+
+            // Write PCM data
+            const pcmBytes = new Uint8Array(pcm16.buffer);
+            for (let i = 0; i < pcmBytes.length; i++, offset++) {
+                view.setUint8(offset, pcmBytes[i]);
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        /** Calls the Gemini TTS API and returns a promise that resolves with the audio URL. */
+        async function getAudioUrl(textToSpeak) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${API_KEY}`;
+            const payload = {
+                contents: [{ parts: [{ text: textToSpeak }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: { prebuiltVoiceConfig: { voiceName: TTS_VOICE } }
+                    }
+                },
+                model: TTS_MODEL
+            };
+
+            let maxRetries = 3;
+            let delay = 1000;
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429 && i < maxRetries - 1) {
+                            console.warn(`TTS API rate limit hit. Retrying in ${delay / 1000}s...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2; // Exponential backoff
+                            continue;
+                        }
+                        throw new Error(`TTS API failed with status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
+                        const sampleRate = 16000; // API default for L16 is 16kHz
+                        const pcmData = base64ToArrayBuffer(audioData);
+                        const pcm16 = new Int16Array(pcmData);
+                        const wavBlob = pcmToWav(pcm16, sampleRate);
+                        return URL.createObjectURL(wavBlob);
+                    } else {
+                        throw new Error("Invalid TTS response structure or mimeType.");
+                    }
+                } catch (error) {
+                    console.error("TTS generation error:", error);
+                    if (i === maxRetries - 1) {
+                        return null; // Return null after all retries fail
+                    }
+                }
+            }
+        }
+        
+        // --- Game Data and Logic ---
+
+        // Helper to generate simple SVG shapes
+        const createSvg = (shape, color, size = '100%') => {
+            let path = '';
+            const fill = color;
+            switch (shape.toLowerCase()) {
+                case 'circle': path = `<circle cx="50" cy="50" r="45" />`; break;
+                case 'square': path = `<rect x="5" y="5" width="90" height="90" rx="10" />`; break;
+                case 'triangle': path = `<polygon points="50,5 95,95 5,95" />`; break;
+                case 'star': path = `<polygon points="50,5 61,35 95,40 70,65 78,95 50,80 22,95 30,65 5,40 39,35" />`; break;
+            }
+            return `<svg viewBox="0 0 100 100" class="w-[${size}] h-[${size}] fill-current text-${fill}-500 stroke-2">${path}</svg>`;
+        };
+
+        const QUESTIONS = [
+            // Mode 1: Color Match (Target: Color Name Spoken, Options: Colored Buttons)
+            { type: 'color', target: 'Blue', prompt: 'Which color is BLUE?', targetAudio: 'Find the color blue.', options: [
+                { id: 1, type: 'color', name: 'Blue', color: 'blue', html: `<div class="w-full h-full bg-blue-500 rounded-lg"></div>` },
+                { id: 2, type: 'color', name: 'Red', color: 'red', html: `<div class="w-full h-full bg-red-500 rounded-lg"></div>` },
+                { id: 3, type: 'color', name: 'Yellow', color: 'yellow', html: `<div class="w-full h-full bg-yellow-400 rounded-lg"></div>` },
+            ]},
+            { type: 'color', target: 'Green', prompt: 'Which color is GREEN?', targetAudio: 'Find the color green.', options: [
+                { id: 4, type: 'color', name: 'Red', color: 'red', html: `<div class="w-full h-full bg-red-500 rounded-lg"></div>` },
+                { id: 5, type: 'color', name: 'Green', color: 'green', html: `<div class="w-full h-full bg-green-500 rounded-lg"></div>` },
+                { id: 6, type: 'color', name: 'Purple', color: 'purple', html: `<div class="w-full h-full bg-purple-500 rounded-lg"></div>` },
+            ]},
+
+            // Mode 2: Shape Match (Target: Shape Name Spoken, Options: Shapes)
+            { type: 'shape', target: 'Square', prompt: 'Which shape is a SQUARE?', targetAudio: 'Find the square shape.', options: [
+                { id: 7, type: 'shape', name: 'Triangle', color: 'teal', html: createSvg('triangle', 'teal') },
+                { id: 8, type: 'shape', name: 'Square', color: 'amber', html: createSvg('square', 'amber') },
+                { id: 9, type: 'shape', name: 'Circle', color: 'indigo', html: createSvg('circle', 'indigo') },
+            ]},
+            { type: 'shape', target: 'Circle', prompt: 'Which shape is a CIRCLE?', targetAudio: 'Find the circle shape.', options: [
+                { id: 10, type: 'shape', name: 'Square', color: 'purple', html: createSvg('square', 'purple') },
+                { id: 11, type: 'shape', name: 'Circle', color: 'pink', html: createSvg('circle', 'pink') },
+                { id: 12, type: 'shape', name: 'Star', color: 'cyan', html: createSvg('star', 'cyan') },
+            ]},
+            
+            // Mode 3: Auditory Match (Target: Emotion Name Spoken, Options: Emotion Faces)
+            { type: 'emotion', target: 'Happy', prompt: 'Which face is HAPPY?', targetAudio: 'Find the happy face.', options: [
+                { id: 13, type: 'emotion', name: 'Sad', emoji: '😢', html: `<span class="text-7xl">😢</span>` },
+                { id: 14, type: 'emotion', name: 'Happy', emoji: '😊', html: `<span class="text-7xl">😊</span>` },
+                { id: 15, type: 'emotion', name: 'Angry', emoji: '😡', html: `<span class="text-7xl">😡</span>` },
+            ]},
+            { type: 'emotion', target: 'Sad', prompt: 'Which face is SAD?', targetAudio: 'Find the sad face.', options: [
+                { id: 16, type: 'emotion', name: 'Sad', emoji: '😞', html: `<span class="text-7xl">😞</span>` },
+                { id: 17, type: 'emotion', name: 'Surprised', emoji: '😮', html: `<span class="text-7xl">😮</span>` },
+                { id: 18, type: 'emotion', name: 'Calm', emoji: '😌', html: `<span class="text-7xl">😌</span>` },
+            ]},
+        ];
+
+        // Global Game State
+        const Game = {
+            questions: [],
+            currentQuestionIndex: 0,
+            score: 0,
+            isLocked: false,
+            audioCache: {},
+            currentAudio: null,
+            ttsError: false,
+
+            init() {
+                this.questions = [...QUESTIONS].sort(() => Math.random() - 0.5); // Shuffle
+                this.updateScore();
+                this.renderMenu();
+                // Ensure audio is ready by pre-caching the first prompt's audio
+                this.preCacheAudio(this.questions[0].targetAudio);
+            },
+
+            renderMenu() {
+                document.getElementById('prompt').innerHTML = `Welcome! Press Start to play.`;
+                document.getElementById('options-area').innerHTML = `
+                    <div class="md:col-span-3 text-xl text-gray-500 p-8">
+                        <p>This game helps match spoken words to visual concepts (colors, shapes, emotions).</p>
+                        <p class="mt-2 text-indigo-500 font-bold">Tap the speaker icon to hear the prompt again!</p>
+                    </div>
+                `;
+                document.getElementById('speaker-button').classList.add('hidden');
+                document.getElementById('start-button').innerText = 'Start Game';
+                document.getElementById('start-button').onclick = () => this.startGame();
+            },
+
+            startGame() {
+                this.currentQuestionIndex = 0;
+                this.score = 0;
+                this.updateScore();
+                document.getElementById('start-button').innerText = 'Next Question';
+                document.getElementById('start-button').onclick = () => this.loadNextQuestion();
+                this.loadQuestion();
+            },
+
+            updateScore() {
+                document.getElementById('score-display').innerText = `Score: ${this.score}/${this.questions.length}`;
+            },
+            
+            // --- Audio & TTS Handlers ---
+
+            async preCacheAudio(text) {
+                if (this.audioCache[text] || this.ttsError) return;
+                
+                document.getElementById('tts-status').innerText = 'Loading audio...';
+                document.getElementById('tts-status').classList.remove('hidden');
+
+                const audioUrl = await getAudioUrl(text);
+                if (audioUrl) {
+                    this.audioCache[text] = audioUrl;
+                    document.getElementById('tts-status').classList.add('hidden');
+                } else {
+                    this.ttsError = true;
+                    document.getElementById('tts-status').innerText = 'Audio unavailable (TTS error).';
+                }
+            },
+
+            async playAudioPrompt() {
+                if (this.isLocked || this.currentAudio && !this.currentAudio.paused) return;
+                
+                const q = this.questions[this.currentQuestionIndex];
+                if (!q || this.ttsError) return;
+
+                let audioUrl = this.audioCache[q.targetAudio];
+                
+                if (!audioUrl) {
+                    document.getElementById('tts-status').innerText = 'Loading audio...';
+                    document.getElementById('tts-status').classList.remove('hidden');
+                    audioUrl = await getAudioUrl(q.targetAudio);
+                    if (audioUrl) {
+                        this.audioCache[q.targetAudio] = audioUrl;
+                        document.getElementById('tts-status').classList.add('hidden');
+                    } else {
+                        this.ttsError = true;
+                        document.getElementById('tts-status').innerText = 'Audio unavailable (TTS error).';
+                        return;
+                    }
+                }
+                
+                this.currentAudio = new Audio(audioUrl);
+                this.currentAudio.play().catch(e => console.error("Error playing audio:", e));
+            },
+
+            // --- Game Flow ---
+
+            loadQuestion() {
+                if (this.currentQuestionIndex >= this.questions.length) {
+                    return this.showEndScreen();
+                }
+
+                this.isLocked = false;
+                const q = this.questions[this.currentQuestionIndex];
+                
+                document.getElementById('speaker-button').classList.remove('hidden');
+                document.getElementById('prompt').innerText = q.prompt;
+                document.getElementById('start-button').classList.add('hidden');
+                
+                // Shuffle options for the current question
+                const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
+
+                let optionsHTML = '';
+                shuffledOptions.forEach(option => {
+                    const isCorrect = option.name === q.target;
+                    const buttonClass = `btn-option bg-gray-100 hover:bg-gray-200 p-4 rounded-xl text-center flex flex-col items-center justify-center h-32 md:h-48 border-4 border-gray-400`;
+                    
+                    optionsHTML += `
+                        <button id="opt-${option.id}" class="${buttonClass}" 
+                                onclick="Game.checkAnswer('${option.name}', ${isCorrect}, this)">
+                            ${option.html}
+                        </button>
+                    `;
+                });
+
+                document.getElementById('options-area').innerHTML = optionsHTML;
+                
+                // Pre-cache audio for the next question while the user plays the current one
+                if (this.currentQuestionIndex + 1 < this.questions.length) {
+                    this.preCacheAudio(this.questions[this.currentQuestionIndex + 1].targetAudio);
+                }
+
+                // Play the prompt automatically (after a short delay for UI load)
+                setTimeout(() => this.playAudioPrompt(), 500);
+            },
+
+            checkAnswer(selectedName, isCorrect, buttonElement) {
+                if (this.isLocked) return;
+                this.isLocked = true;
+
+                if (isCorrect) {
+                    this.score++;
+                    this.updateScore();
+                    buttonElement.classList.add('correct-answer', 'border-green-600', 'bg-green-100');
+                    this.showFeedback('Correct!', 'bg-green-600');
+                } else {
+                    buttonElement.classList.add('border-red-600', 'bg-red-100');
+                    this.showFeedback('Try Again!', 'bg-red-600');
+                    // Highlight the correct answer briefly
+                    const correctOption = this.questions[this.currentQuestionIndex].options.find(opt => opt.name === this.questions[this.currentQuestionIndex].target);
+                    const correctButton = document.getElementById(`opt-${correctOption.id}`);
+                    if (correctButton) {
+                        correctButton.classList.add('correct-answer', 'border-green-600', 'bg-green-100');
+                    }
+                }
+
+                // Disable all options
+                document.querySelectorAll('#options-area button').forEach(btn => {
+                    btn.disabled = true;
+                    btn.classList.add('disabled-option');
+                });
+                
+                document.getElementById('start-button').classList.remove('hidden');
+
+                setTimeout(() => {
+                    this.hideFeedback();
+                }, 1500); 
+            },
+
+            loadNextQuestion() {
+                this.currentQuestionIndex++;
+                // Clean up previous classes
+                document.querySelectorAll('#options-area button').forEach(btn => {
+                    btn.classList.remove('correct-answer', 'border-green-600', 'bg-green-100', 'border-red-600', 'bg-red-100', 'disabled-option');
+                });
+                this.loadQuestion();
+            },
+
+            showEndScreen() {
+                document.getElementById('prompt').innerHTML = `Game Finished!`;
+                document.getElementById('options-area').innerHTML = `
+                    <div class="md:col-span-3 text-center text-3xl font-bold text-indigo-700 p-8">
+                        <p>Your Final Score: ${this.score} out of ${this.questions.length}</p>
+                        <p class="mt-4 text-xl text-gray-600">You did great! Let's play again.</p>
+                    </div>
+                `;
+                document.getElementById('speaker-button').classList.add('hidden');
+                document.getElementById('start-button').innerText = 'Play Again';
+                document.getElementById('start-button').onclick = () => this.startGame();
+                document.getElementById('start-button').classList.remove('hidden');
+            },
+
+            showFeedback(text, bgColor) {
+                const overlay = document.getElementById('feedback-overlay');
+                const content = document.getElementById('feedback-content');
+                
+                content.innerText = text;
+                content.className = `p-10 md:p-16 rounded-2xl shadow-2xl text-white text-3xl md:text-6xl font-extrabold transform scale-100 animate-pulse ${bgColor}`;
+                overlay.classList.add('feedback-visible');
+            },
+
+            hideFeedback() {
+                document.getElementById('feedback-overlay').classList.remove('feedback-visible');
+            }
+        };
+
+        // Initialize the game when the page loads
+        window.onload = () => {
+            Game.init();
+        };
+
+    </script>
+</body>
+</html>
